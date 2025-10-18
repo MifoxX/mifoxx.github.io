@@ -1,0 +1,77 @@
+services:
+  townsquare:
+    container_name: townsquare
+    build:
+      context: "."
+      dockerfile: Dockerfile
+    command: "npm run dev"
+    develop:
+      watch:
+        - action: sync
+          path: .
+          target: /app/townsquare
+          ignore:
+            - node_modules/
+            - dist/
+            - .git/
+            - .vscode/
+            - server/
+        - action: sync+restart
+          path: vite.config.ts
+          target: /app/townsquare/vite.config.ts
+        - action: rebuild
+          path: package.json
+        - action: rebuild
+          path: package-lock.json
+        - action: rebuild
+          path: Dockerfile
+        - action: rebuild
+          path: docker-compose.yml
+    environment:
+      NODE_ENV: development
+      # VITE_SERVER_URL: ws://localhost:8078/
+      VITE_SERVER_URL: wss://live.clocktower.online:8080/
+    ports:
+      - "8080:5173"
+    working_dir: /app/townsquare
+    networks:
+      - townsquare-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+
+  ws_server:
+    container_name: ws_server
+    build:
+      context: "."
+      dockerfile: Dockerfile.server
+    command: "node index.js"
+    develop:
+      watch:
+        - action: sync+restart
+          path: server/
+          target: /app/server
+          ignore:
+            - server/node_modules/
+            - server/certs/
+        - action: rebuild
+          path: Dockerfile.server
+        - action: rebuild
+          path: docker-compose.yml
+    environment:
+      NODE_ENV: development
+      ALLOWED_ORIGINS: "([^.]+\\.github\\.io|localhost|clocktower\\.online|eddbra1nprivatetownsquare\\.xyz)"
+    ports:
+      - "8078:8081"
+    working_dir: /app/server
+    networks:
+      - townsquare-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200k"
+
+networks:
+  townsquare-network:
+    driver: bridge

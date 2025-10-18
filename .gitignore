@@ -1,0 +1,9 @@
+.idea
+.vscode/*
+!.vscode/*.template.json
+node_modules
+dist
+*.pem
+*.log
+.env
+docker-compose.yml
