@@ -1,8 +1,8 @@
 import http from "http";
-import WebSocket from "ws";
+import { Server as WebSocketServer } from "ws";
 import client from "prom-client";
 
-// Create a Registry which registers the metrics
+// --- METRICS SETUP ---
 const register = new client.Registry();
 register.setDefaultLabels({ app: "clocktower-online" });
 
@@ -12,7 +12,7 @@ const PING_INTERVAL = 30000; // 30 seconds
 const server = process.env.NODE_ENV === "development" ? null : http.createServer();
 
 // --- WEBSOCKET SERVER ---
-const wss = new WebSocket.Server({
+const wss = new WebSocketServer({
   ...(process.env.NODE_ENV === "development" ? { port: 8081 } : { server }),
   verifyClient: (info) =>
     info.origin &&
@@ -24,7 +24,7 @@ const wss = new WebSocket.Server({
 // --- UTILS ---
 function noop() {}
 function heartbeat() {
-  this.latency = Math.round((new Date().getTime() - this.pingStart) / 2);
+  this.latency = Math.round((Date.now() - this.pingStart) / 2);
   this.counter = 0;
   this.isAlive = true;
 }
@@ -52,7 +52,7 @@ const metrics = {
         this.set(
           { name: channel },
           channels[channel].filter(
-            (ws) => ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)
+            (ws) => ws && (ws.readyState === WebSocketServer.OPEN || ws.readyState === WebSocketServer.CONNECTING)
           ).length
         );
       }
@@ -78,7 +78,7 @@ wss.on("connection", function connection(ws, req) {
     ws.playerId === "host" &&
     channels[ws.channel] &&
     channels[ws.channel].some(
-      (client) => client !== ws && client.readyState === WebSocket.OPEN && client.playerId === "host"
+      (client) => client !== ws && client.readyState === WebSocketServer.OPEN && client.playerId === "host"
     )
   ) {
     console.log(ws.channel, "duplicate host");
@@ -113,7 +113,7 @@ wss.on("connection", function connection(ws, req) {
         channels[ws.channel].forEach(client => {
           if (
             client !== ws &&
-            client.readyState === WebSocket.OPEN &&
+            client.readyState === WebSocketServer.OPEN &&
             (ws.playerId === "host" || client.playerId === "host")
           ) {
             client.send(data.replace(/latency/, (client.latency || 0) + (ws.latency || 0)));
@@ -125,7 +125,7 @@ wss.on("connection", function connection(ws, req) {
         try {
           const dataToPlayer = JSON.parse(data)[1];
           channels[ws.channel].forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN && dataToPlayer[client.playerId]) {
+            if (client !== ws && client.readyState === WebSocketServer.OPEN && dataToPlayer[client.playerId]) {
               client.send(JSON.stringify(dataToPlayer[client.playerId]));
               metrics.messages_outgoing.inc();
             }
@@ -136,7 +136,7 @@ wss.on("connection", function connection(ws, req) {
         break;
       default:
         channels[ws.channel].forEach(client => {
-          if (client !== ws && client.readyState === WebSocket.OPEN) {
+          if (client !== ws && client.readyState === WebSocketServer.OPEN) {
             client.send(data);
             metrics.messages_outgoing.inc();
           }
@@ -159,7 +159,7 @@ const interval = setInterval(function ping() {
   });
 
   for (let channel in channels) {
-    if (!channels[channel].some(ws => ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING))) {
+    if (!channels[channel].some(ws => ws && (ws.readyState === WebSocketServer.OPEN || ws.readyState === WebSocketServer.CONNECTING))) {
       metrics.channels_list.remove({ name: channel });
       delete channels[channel];
     }
